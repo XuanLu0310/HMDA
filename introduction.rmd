@@ -1,0 +1,117 @@
+---
+title: "Introduction - R BP December 2017"
+author: "Feng Qi"
+date: "November 29, 2017"
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## About Me
+
+Chemical Physics background.
+
+Previously, working in NGS, bioinformatics;
+```{r echo=FALSE, out.width = "25%"}
+library(knitr) 
+include_graphics("sbp.gif") 
+```
+
+Then HealthCare, LexisNexis Data Scientist;
+```{r echo=FALSE, out.width = "25%"}
+library(knitr) 
+include_graphics("logo.png") 
+```
+
+And then, Marketing Optimization;
+```{r echo=FALSE, out.width = "25%"}
+include_graphics("dis.png") 
+```
+
+Now, R course instructor.......
+```{r echo=FALSE, out.width = "10%"}
+include_graphics("dbs.png") 
+```
+
+wechat: hedyld
+
+Email: nclxin@gmail.com
+
+## About the Project
+
+```{r echo=FALSE, out.width = "30%",fig.align='left'}
+include_graphics("project.jpg") 
+```
+**Data Set**: Home Mortgage Disclosure Act Data. The Home Mortgage Disclosure Act (HMDA) requires many financial institutions to maintain, report, and publicly disclose information about mortgages.
+
+This dataset covers mortgage decisions for first-lien, owner-occupied, 1-4 family house made in 2016 for the state of Florida. 
+
+<span style="font-size: 14px;">
+[https://github.com/fengqifang/HMDA/raw/master/hmda_lar_FL_2016.zip]</span>
+
+<span style="font-size: 14px;">
+[https://cfpb.github.io/api/hmda/fields.html] </span>
+
+## Environment 
+RStudio: I expect you will use R for all things related to this project.
+            
+github: A very nice tutorial <span style="font-size: 14px;">[https://plot.ly/r/github-getting-started-for-data-scientists/] </span>
+
+## Example
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(plotly)
+
+d <- diamonds[sample(nrow(diamonds), 1000), ]
+
+p <- plot_ly(
+  d, x = ~carat, y = ~price,
+  # Hover text:
+  text = ~paste("Price: ", price, '$<br>Cut:', cut),
+  color = ~carat, size = ~carat
+)
+
+p
+```
+
+## htmlwidgets
+<span style="font-size:16px;">[http://www.htmlwidgets.org/] </span>
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, cache = TRUE}
+library(quantmod)
+library(highcharter)
+
+x <- getSymbols("AAPL", auto.assign = FALSE)
+y <- getSymbols("AMZN", auto.assign = FALSE)
+z <- getSymbols("VZ", auto.assign = FALSE)
+
+
+highchart() %>% 
+    hc_add_series_ohlc(x) %>%
+    hc_add_series_ohlc(y, type = "ohlc") %>%
+    hc_add_series_ohlc(z, type = "line")
+```
+
+
+## About the Assignments
+
+|Week	|Task	|Deliverable/Assignment	|Web Conference|
+|:---|-----------------------|------------|------------|
+|0	 |Set up R environment   |	None      |	Yes        |
+|1	 |Download data, R Basics|		        |            |
+|2	 |EDA 1	                 |Yes,Summary |	           |
+|3	 |EDA 2		               |            |Yes,Insights|
+|4	 |EDA 3, Model Building  |Yes,Summary |	           |
+|5	 |Report	               |Code/result |presentation|
+
+## Questions?
+
+```{r echo=FALSE, out.width = "40%",fig.align='center'}
+include_graphics("house.jpg") 
+```
+
+
+
+
