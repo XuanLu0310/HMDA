@@ -1,0 +1,339 @@
+---
+title: "HMDA Working Progress Report"
+author: "Xuan Lu"
+date: "December 1, 2017"
+output:
+  html_document:
+    toc: true
+    theme: united
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Introduction
+This project is on Home Mortgage Disclosure Act Data(HMDA), which requires many financial institutions to maintain, report, and publicly disclose information about mortgages.  This dataset covers mortgage decisions for first-lien, owner-occupied, 1-4 family house made in 2016 for the state of Florida. 
+# Data wrangling and exploratory data analysis
+## Download and Preprocess data
+The data of is downloaded from <https://github.com/fengqifang/HMDA/raw/master/hmda_lar_FL_2016.zip>. Descriptions for each column can be found in <https://cfpb.github.io/api/hmda/fields.html>.
+
+```{r library,warning=FALSE,message=FALSE}
+library(data.table)
+library(dplyr)
+library(ggplot2)
+library(kableExtra)
+library(dygraphs)
+library(knitr)
+library(plotly)
+library(stringr)
+library(lubridate)
+library(Matrix)
+```
+
+```{r}
+dat <- fread("hmda_lar_FL_2016.csv",na.strings = c("",NA))
+
+head(dat,n =3)
+```
+There are 36 columns and 415338 observations in the raw data. let's look at the data type and missing data rate for each column.
+
+```{r}
+dat %>% sapply(., function(x)sum(is.na(x))/length(x)) %>%
+         kable("html",col.names = "Missing.Rate") %>%
+         kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+###Data Cleanning and Exploratory Data Analysis
+Let's examining the varibles one by one. The first 9 columns are continous number, and it needs to be converted numeric first. And for other column, we can convert them into factor variables for now.
+```{r}
+names(dat)
+dat <- dat %>% mutate_at(vars(1:9),funs(as.numeric(.)))
+dat <- as.data.frame(unclass(dat))
+str(dat)
+```
+
+**tract_to_msamd_income** 
+It is the percentage of the median family income for the tract compared to the median family income for the MSA/MD, rounded to two decimal places.
+
+```{r}
+p <-ggplot(dat, aes(x = "", y = tract_to_msamd_income,fill="tract_to_msamd_income[%]")) + geom_boxplot()
+p <- ggplotly(p)
+p
+```
+There are 445 missing values and the values ranging from 11 to 500.
+
+**rate_spread** 
+Rate spread for the loan is the difference between the loan's annual percentage rate (APR) and the average prime offer rate (APOR). This value is after the loan approval, which alos can not be used in the prediction. It can be dropped directly. s
+```{r}
+dat <- data.table(dat)[, rate_spread:= NULL]
+```
+**population** and **minority_population**
+There are 372 missing values in both variables. 
+```{r}
+p <- ggplot(dat,aes(population,fill = "population"))+geom_histogram(fill = "red")
+p1 <- ggplotly(p)
+
+p <- ggplot(dat,aes(minority_population,fill = "minority_population[%]"))+
+        geom_histogram(fill = "blue")
+p2 <- ggplotly(p)
+p <- subplot(p1,p2)
+p
+```
+**number_of_owner_occupied_units** and **number_of_1_to_4_family_units**
+
+```{r}
+p <- ggplot(dat,aes(number_of_owner_occupied_units,fill = "owener_occ"))+geom_histogram(fill = "red")
+p1 <- ggplotly(p)
+
+p <- ggplot(dat,aes(number_of_1_to_4_family_units,fill = "1 to 4 family units"))+
+        geom_histogram(fill = "blue")
+p2 <- ggplotly(p)
+p <- subplot(p1,p2)
+p
+```
+ Impute the missing value with median.
+```{r}
+dat <- dat %>% mutate_at(vars(number_of_owner_occupied_units,number_of_1_to_4_family_units),funs(ifelse(is.na(.),median(.),.))) 
+```
+
+**loan_amount_000s**,**hud_median_family_income**,**applicant_income_000s**
+```{r loan}
+summary(dat$loan_amount_000s)
+
+```
+```{r}
+summary(dat$loan_amount_000s)
+```
+These two variables have very long tails. We will need to transform it first and then plot
+```{r}
+p <- ggplot(dat, aes(x="Loan amount",y = log(loan_amount_000s),fill = "loan_amount_000s")) + geom_boxplot(fill ="red")
+p1 <- ggplotly(p)
+
+p <- ggplot(dat, aes(x ="median family income",y = log(hud_median_family_income/1000),fill = "median_family_income_000s")) + geom_boxplot(fill ="blue")
+
+p2 <- ggplotly(p)
+p <- ggplot(dat, aes(x = "applicant income",y=log(applicant_income_000s),fill = "applicant_income_000s")) + geom_boxplot(fill = "green")
+p3 <- ggplotly(p)
+
+subplot(p1,p2,p3)
+
+```
+There are a lot of outlier in loan amount and applicant income. Those units are in thounsands, which means the highest loan is over 20M and the family income is 10M. It is interesting to see the ratio of loan amount and family income.
+
+```{r ratio}
+dt <- data.table(dat)[,.(applicant_income_000s,loan_amount_000s)][,ratio := ifelse((applicant_income_000s>0 & loan_amount_000s >0),loan_amount_000s/applicant_income_000s,NA)]
+p <- ggplot(dt,aes(x="loan_over_income",y = ratio, fill = "loan_over_income"))+ geom_boxplot()
+ggplotly(p)
+```
+
+```{r}
+summary(dt$ratio)
+```
+The maximum ratio of loan amount over income is 383, which seems more like a typo when computing the loan amount. There are 13 records with ratio over 100. This can be dropped from the data directly.
+
+```{r}
+sum(dt$ratio >100,na.rm = TRUE)
+dat$ratio <- dt$ratio
+dat <- data.table(dat)[ratio<100|is.na(ratio)]
+```
+I'm going to use KNN to impute the missing data in applicant income, so I will keep all the NA in ratio, which can be filled in when predicting the applicant income.
+
+**state_name** and **state_abbr**
+The data set is from Florida and these two fields are same for all records.They can be dropped directly.
+```{r}
+dat <- data.table(dat)[,c("state_name","state_abbr") := NULL]
+```
+
+**sequence_number**  and  **respondent_id**
+sequence_number is a unique number generated for each loan. respondent_id is a code representing the bank or other financial institution that is reporting the loan or application
+```{r}
+dat <- data.table(dat)[,sequence_number := as.numeric(as.character(sequence_number))]
+unique(dat$respondent_id)
+```
+There are 1347 different respondent id, the format are different, we change the "-" to 0. I want to look at the first 20 most respondent id.
+
+```{r}
+dat <- data.table(dat)[,respondent_id_new := gsub("-","0",as.character(respondent_id))]
+dt <- data.table(dat)[,.(respondent_id_new)][, ct := .N, by = respondent_id_new]
+dt <- unique(dt)
+dt <- dt[order(-ct)]
+dt[1:20,]
+```
+**purchaser_type_name** 
+```{r warning=FALSE}
+unique(dat$purchaser_type_name)
+dt <- data.table(dat)[,ct := .N,by = purchaser_type_name][,.(purchaser_type_name,ct)]
+dt <- unique(dt)
+p <- ggplot(dt, aes(x = purchaser_type_name,y = ct))+ geom_histogram(stat = "identity",fill = "blue") +  scale_x_discrete(labels = function(x) str_wrap(x, width = 20))+ theme(axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size = 5))
+ggplotly(p)
+```
+
+**property_type_name**
+
+```{r warning=FALSE}
+unique(dat$property_type_name)
+sum(is.na(dat$property_type_name))
+```
+There is only one value in the property_type_name and no missing value. This column can be dropped directly. 
+
+```{r warning=FALSE}
+dat <- data.table(dat)[,property_type_name := NULL]
+```
+
+**preapproval_name**
+```{r warning=FALSE}
+unique(dat$preapproval_name)
+```
+Let's look at the preapproval distribution.
+```{r warning=FALSE}
+dt <- data.table(dat)[,ct := .N,by = preapproval_name][,.(preapproval_name,ct)]
+dt <- unique(dt)
+p <- ggplot(dt, aes(x = preapproval_name,y = ct))+ geom_histogram(stat = "identity",fill = "blue") 
+ggplotly(p)
+
+```
+
+**owner_occupancy_name**
+```{r}
+unique(dat$owner_occupancy_name)
+sum(is.na(dat$owner_occupancy_name))
+dat <- data.table(dat)[,owner_occupancy_name := NULL]
+```
+**msamd_name**
+```{r}
+dt <- data.table(dat)[,ct := .N,by = msamd_name][,.(msamd_name,ct)]
+dt <- unique(dt)
+p <- ggplot(dt, aes(x = msamd_name,y = ct))+ geom_histogram(stat = "identity",fill = "blue") +  scale_x_discrete(labels = function(x) str_wrap(x, width = 20))+ theme(axis.text.x=element_text(angle=45,hjust=1,vjust=0.5))
+ggplotly(p)
+```
+
+**loan_type_name** 
+```{r}
+dt <- data.table(dat)[,ct := .N,by = loan_type_name][,.(loan_type_name,ct)]
+dt <- unique(dt)
+p <- ggplot(dt, aes(x = loan_type_name,y = ct))+ geom_histogram(stat = "identity",fill = "blue") 
+ggplotly(p)
+```
+
+**loan_purpose_name**
+```{r}
+dt <- data.table(dat)[,ct := .N,by = loan_purpose_name][,.(loan_purpose_name,ct)]
+dt <- unique(dt)
+p <- ggplot(dt, aes(x = loan_purpose_name,y = ct))+ geom_histogram(stat = "identity",fill = "blue")
+ggplotly(p)
+```
+**lien_status_name**
+```{r}
+dat <-data.table(dat)[,lien_status_name:= NULL]
+```
+**hoepa_status_name**
+```{r}
+dt <- data.table(dat)[,ct := .N,by = hoepa_status_name][,.(hoepa_status_name,ct)]
+dt <- unique(dt)
+p <- ggplot(dt, aes(x = hoepa_status_name,y = ct))+ geom_histogram(stat = "identity",fill = "blue")
+ggplotly(p)
+
+dat <- data.table(dat)[,hoepa_status := ifelse(as.character(hoepa_status_name) == "HOEPA loan",1,0)]
+```
+**county_name**
+
+```{r}
+unique(dat$county_name)
+sum(is.na(dat$county_name))
+dim(dat[is.na(county_name)&!is.na(msamd_name)])
+```
+There are 162 missing values in county. And those are also missing msamd information.
+
+```{r}
+dt <- data.table(dat)[,ct := .N,by = county_name][,.(county_name,ct)]
+dt <- unique(dt)
+p <- ggplot(dt, aes(x=reorder(county_name, ct), y=ct)) +
+  geom_bar(stat="identity",fill = "blue") +
+  theme(axis.text.y=element_text(size = 5))+
+  coord_flip()
+ggplotly(p)
+```
+**edit_status_name**
+```{r}
+sum(is.na(dat$edit_status_name))
+dat <- data.table(dat)[,edit_status_new := ifelse(is.na(edit_status_name),0,1)]
+```
+
+**denial_reason_name_1**
+```{r}
+dat <- data.table(dat)[,denial_reason_name_1 := NULL]
+```
+**applicant_sex_name** and **co_applicant_sex_name**
+```{r}
+unique(dat$applicant_sex_name)
+```
+```{r}
+unique(dat$co_applicant_sex_name)
+```
+```{r}
+dt <- data.table(dat)[,ct := .N,by = applicant_sex_name][,.(applicant_sex_name,ct)]
+dt <- unique(dt)
+p <- ggplot(dt, aes(x = applicant_sex_name,y = ct,fill = "applicant"))+ geom_histogram(stat = "identity",fill = "red")  
+p1 <- ggplotly(p)
+
+dt <- data.table(dat)[,ct := .N,by = co_applicant_sex_name][,.(co_applicant_sex_name,ct)]
+dt <- unique(dt)
+p <- ggplot(dt, aes(x = co_applicant_sex_name,y = ct,fill = "co_applicant"))+ geom_histogram(stat = "identity",fill = "blue")  
+p2 <- ggplotly(p)
+subplot(p1,p2)
+```
+**applicant_race_name_1** and **co_applicant_race_name_1**
+```{r}
+unique(dat$applicant_race_name_1)
+```
+```{r}
+unique(dat$co_applicant_race_name_1)
+```
+```{r}
+dt <- data.table(dat)[,ct := .N,by = applicant_race_name_1][,.(applicant_race_name_1,ct)]
+dt <- unique(dt)
+p <- ggplot(dt, aes(x = applicant_race_name_1,y = ct,fill = "applicant"))+ geom_histogram(stat = "identity",fill = "blue")+  scale_x_discrete(labels = function(x) str_wrap(x, width = 20))+ theme(axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size=5))  
+p1 <- ggplotly(p)
+
+dt <- data.table(dat)[,ct := .N,by = co_applicant_race_name_1][,.(co_applicant_race_name_1,ct)]
+dt <- unique(dt)
+p <- ggplot(dt, aes(x = co_applicant_race_name_1,y = ct,fill = "co_applicant"))+ geom_histogram(stat = "identity",fill = "red")+  scale_x_discrete(labels = function(x) str_wrap(x, width = 20))+ theme(axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size=5))  
+p2 <- ggplotly(p)
+subplot(p1,p2)
+```
+**census_tract_number**
+```{r}
+dt <- data.table(dat)[,ct := .N,by = census_tract_number][,.(census_tract_number,ct)]
+dt <- unique(dt)
+summary(dt$ct)
+```
+```{r}
+dt <- dt[order(-ct)][1:20]
+p <- ggplot(dt, aes(x=reorder(census_tract_number, ct), y=ct)) +
+  geom_bar(stat="identity",fill = "blue")+
+  coord_flip()
+ggplotly(p)
+```
+**applicant_ethnicity_name** and **co_applicant_ethnicity_name**
+```{r}
+dt <- data.table(dat)[,ct := .N,by = applicant_ethnicity_name][,.(applicant_ethnicity_name,ct)]
+dt <- unique(dt)
+p <- ggplot(dt, aes(x = applicant_ethnicity_name,y = ct,fill = "applicant"))+ geom_histogram(stat = "identity",fill = "blue")+  scale_x_discrete(labels = function(x) str_wrap(x, width = 20))+ theme(axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size=5))  
+p1 <- ggplotly(p)
+
+dt <- data.table(dat)[,ct := .N,by = co_applicant_ethnicity_name][,.(co_applicant_ethnicity_name,ct)]
+dt <- unique(dt)
+p <- ggplot(dt, aes(x = co_applicant_ethnicity_name,y = ct,fill = "co_applicant"))+ geom_histogram(stat = "identity",fill = "red")+  scale_x_discrete(labels = function(x) str_wrap(x, width = 20))+ theme(axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size=5))  
+p2 <- ggplotly(p)
+subplot(p1,p2)
+```
+**agency_name** and **agency_abbr**
+We only need one of them in the data.
+
+```{r warning=FALSE}
+dat <- data.table(dat)[,agency_name := NULL]
+dt <- data.table(dat)[,ct := .N,by = agency_abbr][,.(agency_abbr,ct)]
+dt <- unique(dt)
+p <- ggplot(dt, aes(x = agency_abbr,y = ct))+ geom_histogram(stat = "identity",fill = "blue")  
+ggplotly(p)
+```
