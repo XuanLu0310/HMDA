@@ -31,11 +31,11 @@ library(Matrix)
 ```
 
 ```{r}
-dat <- fread("hmda_lar_FL_2016.csv",na.strings = c("",NA))
-
+dat <- fread("hmda_lar_FL_2016_Full.csv",na.strings = c("",NA))
+#dat <- fread("C:\\Users\\xlu\\Downloads\\hmda\\hmda_lar_FL_2016_Full.csv")
 head(dat,n =3)
 ```
-There are 36 columns and 415338 observations in the raw data. let's look at the data type and missing data rate for each column.
+There are 37 columns and 418255 observations in the raw data. let's look at the data type and missing data rate for each column.
 
 ```{r}
 dat %>% sapply(., function(x)sum(is.na(x))/length(x)) %>%
@@ -44,23 +44,37 @@ dat %>% sapply(., function(x)sum(is.na(x))/length(x)) %>%
 ```
 
 ###Data Cleanning and Exploratory Data Analysis
-Let's examining the varibles one by one. The first 9 columns are continous number, and it needs to be converted numeric first. And for other column, we can convert them into factor variables for now.
+####Target: action_taken_name
+
 ```{r}
+unique(dat$action_taken_name)
+dt <- data.table(dat)[,ct := .N, by = action_taken_name] 
+p <- plot_ly(dt, labels = ~action_taken_name, values = ~ct, type = 'pie',
+                 textposition = "inside",
+                 textinfo = "label+percent") %>% 
+        layout(title = "Loan Application Action Taken")
+p  
+```
+There are total around 30% of the loan application that got denied and 70% loan approved. It will be interesting to see how the action taken different by variables.
+Let's examining the varibles one by one. The first 9 columns are continous number, and it needs to be converted numeric first. And for other column, we can convert them into factor variables for now.
+
+```{r massage =FALSE}
 names(dat)
 dat <- dat %>% mutate_at(vars(1:9),funs(as.numeric(.)))
-dat <- as.data.frame(unclass(dat))
 str(dat)
 ```
 
 **tract_to_msamd_income** 
-It is the percentage of the median family income for the tract compared to the median family income for the MSA/MD, rounded to two decimal places.
+It is the percentage of the median family income for the tract compared to the median family income for the MSA/MD, rounded to two decimal places. There are 2112 missing values and the values ranging from 11 to 500.
 
 ```{r}
-p <-ggplot(dat, aes(x = "", y = tract_to_msamd_income,fill="tract_to_msamd_income[%]")) + geom_boxplot()
+p <-ggplot(dat, aes(x =action_taken_name, y = log(tract_to_msamd_income),fill=action_taken_name)) + geom_boxplot()+theme_bw()+
+        labs(x = "action_taken_name", y = "log of tract_to_msamd_income[%]")+ 
+        scale_x_discrete(labels = function(x) str_wrap(x, width = 20))+
+        theme(axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size = 5),legend.position="none")
 p <- ggplotly(p)
 p
 ```
-There are 445 missing values and the values ranging from 11 to 500.
 
 **rate_spread** 
 Rate spread for the loan is the difference between the loan's annual percentage rate (APR) and the average prime offer rate (APOR). This value is after the loan approval, which alos can not be used in the prediction. It can be dropped directly. s
@@ -68,38 +82,55 @@ Rate spread for the loan is the difference between the loan's annual percentage 
 dat <- data.table(dat)[, rate_spread:= NULL]
 ```
 **population** and **minority_population**
-There are 372 missing values in both variables. 
+There are 1862 missing values in both variables. 
 ```{r}
-p <- ggplot(dat,aes(population,fill = "population"))+geom_histogram(fill = "red")
-p1 <- ggplotly(p)
+p <- ggplot(dat,aes(x= action_taken_name, y = population,fill = action_taken_name ))+
+        geom_boxplot()+
+        theme_bw()+
+        labs(x = "action_taken_name",y =" population")+
+        scale_x_discrete(labels = function(x) str_wrap(x, width = 20))+
+        theme(axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size = 5),legend.position="none")
+ggplotly(p)
 
-p <- ggplot(dat,aes(minority_population,fill = "minority_population[%]"))+
-        geom_histogram(fill = "blue")
-p2 <- ggplotly(p)
-p <- subplot(p1,p2)
-p
+p <- ggplot(dat,aes(x= action_taken_name, y = minority_population,fill = action_taken_name ))+
+        geom_boxplot()+
+        theme_bw()+
+        labs(x = "action_taken_name",y =" minority_population")+
+        scale_x_discrete(labels = function(x) str_wrap(x, width = 20))+
+        theme(axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size = 5),legend.position="none")
+ggplotly(p)
 ```
+
 **number_of_owner_occupied_units** and **number_of_1_to_4_family_units**
-
+There are 1889 missing values in number_of_owner_occupied_units and 2291 missing values for number_of_1_to_4_family_units.
 ```{r}
-p <- ggplot(dat,aes(number_of_owner_occupied_units,fill = "owener_occ"))+geom_histogram(fill = "red")
-p1 <- ggplotly(p)
+p <- ggplot(dat,aes(x= action_taken_name, y = number_of_owner_occupied_units,fill = action_taken_name ))+
+        geom_boxplot()+
+        theme_bw()+
+        labs(x = "action_taken_name",y =" number_of_owner_occupied_units",
+             title = "number_of_owner_occupied_units")+
+        scale_x_discrete(labels = function(x) str_wrap(x, width = 20))+
+        theme(axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size = 5),legend.position="none")
+ggplotly(p)
 
-p <- ggplot(dat,aes(number_of_1_to_4_family_units,fill = "1 to 4 family units"))+
-        geom_histogram(fill = "blue")
-p2 <- ggplotly(p)
-p <- subplot(p1,p2)
-p
+p <- ggplot(dat,aes(x= action_taken_name, y = number_of_1_to_4_family_units,fill = action_taken_name ))+
+        geom_boxplot()+
+        theme_bw()+
+        labs(x = "action_taken_name",y =" number_of_1_to_4_family_units",
+             title = "number_of_1_to_4_family_units")+
+        scale_x_discrete(labels = function(x) str_wrap(x, width = 20))+
+        theme(axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size = 5),legend.position="none")
+ggplotly(p)
+
 ```
- Impute the missing value with median.
-```{r}
+To be determined, how to impute the missing value, median, mean or knn.
+```{r eval=FALSE}
 dat <- dat %>% mutate_at(vars(number_of_owner_occupied_units,number_of_1_to_4_family_units),funs(ifelse(is.na(.),median(.),.))) 
 ```
 
 **loan_amount_000s**,**hud_median_family_income**,**applicant_income_000s**
 ```{r loan}
 summary(dat$loan_amount_000s)
-
 ```
 ```{r}
 summary(dat$loan_amount_000s)
@@ -118,12 +149,25 @@ p3 <- ggplotly(p)
 subplot(p1,p2,p3)
 
 ```
-There are a lot of outlier in loan amount and applicant income. Those units are in thounsands, which means the highest loan is over 20M and the family income is 10M. It is interesting to see the ratio of loan amount and family income.
+There are a lot of outlier in loan amount and applicant income. Those units are in thounsands, which means the highest loan is over 20M and the family income is 10M. It is interesting to see the ratio of loan amount and family income. How ratio of applicant income and loan amount as well as applicant income and median family income affects the loan decisions.
 
 ```{r ratio}
-dt <- data.table(dat)[,.(applicant_income_000s,loan_amount_000s)][,ratio := ifelse((applicant_income_000s>0 & loan_amount_000s >0),loan_amount_000s/applicant_income_000s,NA)]
-p <- ggplot(dt,aes(x="loan_over_income",y = ratio, fill = "loan_over_income"))+ geom_boxplot()
+dt <- data.table(dat)[,.(applicant_income_000s,loan_amount_000s,hud_median_family_income,action_taken_name)][,ratio := ifelse((applicant_income_000s>0 & loan_amount_000s >0),log(loan_amount_000s)/log(applicant_income_000s),NA)][,ratio2 :=log(applicant_income_000s*1000)/log(hud_median_family_income)]
+
+p <- ggplot(dt,aes(x=action_taken_name,y = ratio, fill = action_taken_name))+
+        geom_boxplot()+
+        labs(title = "income over loan amount ratio (log)")+
+        scale_x_discrete(labels = function(x) str_wrap(x, width = 20))+
+        theme(axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size = 5),legend.position="none")
 ggplotly(p)
+
+p <- ggplot(dt,aes(x=action_taken_name,y = ratio2, fill = action_taken_name))+
+        geom_boxplot()+
+        labs(title = "applicant income over median family income ratio(log)")+
+        scale_x_discrete(labels = function(x) str_wrap(x, width = 20))+
+        theme(axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size = 5),legend.position="none")
+ggplotly(p)
+
 ```
 
 ```{r}
@@ -136,6 +180,7 @@ sum(dt$ratio >100,na.rm = TRUE)
 dat$ratio <- dt$ratio
 dat <- data.table(dat)[ratio<100|is.na(ratio)]
 ```
+
 I'm going to use KNN to impute the missing data in applicant income, so I will keep all the NA in ratio, which can be filled in when predicting the applicant income.
 
 **state_name** and **state_abbr**
@@ -150,21 +195,51 @@ sequence_number is a unique number generated for each loan. respondent_id is a c
 dat <- data.table(dat)[,sequence_number := as.numeric(as.character(sequence_number))]
 unique(dat$respondent_id)
 ```
-There are 1347 different respondent id, the format are different, we change the "-" to 0. I want to look at the first 20 most respondent id.
+I want to look at the first 20 most respondent id. And how loan action taken different in these respondent ids
 
 ```{r}
-dat <- data.table(dat)[,respondent_id_new := gsub("-","0",as.character(respondent_id))]
-dt <- data.table(dat)[,.(respondent_id_new)][, ct := .N, by = respondent_id_new]
-dt <- unique(dt)
-dt <- dt[order(-ct)]
-dt[1:20,]
+res_list <-plyr::count(dat$respondent_id) %>% arrange(-freq)%>%head(20)
+dt <- dat %>% filter(respondent_id %in% res_list[[1]])
+p <- ggplot(dt,aes(x=respondent_id,fill = action_taken_name))+
+        geom_bar(position = "fill")+
+        theme_bw()+
+        labs(title = "20 most respondent id")+
+        scale_x_discrete(labels = function(x) str_wrap(x, width = 20))+
+        theme(axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size = 5),legend.position="none")
+ggplotly(p)
 ```
+A simplify F test to see which levels are important in terms of variance explained. The null hypothese is that every level has the same means. The dependant variable is y, which is 0 only when loan **action_taken_name** is Loan originated, 1 otherwise
+```{r message=FALSE, warning=FALSE}
+dat <- data.table(dat)[,y := ifelse(action_taken_name == "Loan originated",1,0)]
+dt <- data.table(dat)[,.(respondent_id,y)][, {ct = .N; gct = sum(y);list(ct = ct, gct = gct)},by = respondent_id][,p_y := sum(gct)/sum(ct)]
+
+for (i in 1:length(dt$ct)) {
+t <- prop.test(dt$gct[i], dt$ct[i],p=dt$p_y[i])
+dt$p[i] <- t$p.value
+}
+sum(dt$p < 0.05)
+```
+
+It is indicated that there are 359 respondent_id level rejects the null hypothesis of being the same as the mean. 
+
+**Should I further analyze these 359 levels and combine those no significant different from others?**
+
 **purchaser_type_name** 
 ```{r warning=FALSE}
 unique(dat$purchaser_type_name)
 dt <- data.table(dat)[,ct := .N,by = purchaser_type_name][,.(purchaser_type_name,ct)]
 dt <- unique(dt)
 p <- ggplot(dt, aes(x = purchaser_type_name,y = ct))+ geom_histogram(stat = "identity",fill = "blue") +  scale_x_discrete(labels = function(x) str_wrap(x, width = 20))+ theme(axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size = 5))
+ggplotly(p)
+```
+This variable can be considered as an information leak when we need to predict the action taken by loan, since the only actions marked with purchaser  
+```{r}
+p <- ggplot(dat,aes(x=purchaser_type_name,fill = action_taken_name))+
+        geom_bar(position = "fill")+
+        theme_bw()+
+        labs(title = "purchaser type")+
+        scale_x_discrete(labels = function(x) str_wrap(x, width = 20))+
+        theme(axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size = 5),legend.position="none")
 ggplotly(p)
 ```
 
@@ -192,7 +267,26 @@ p <- ggplot(dt, aes(x = preapproval_name,y = ct))+ geom_histogram(stat = "identi
 ggplotly(p)
 
 ```
+how it affects the loan action decision.
+```{r}
+p <- ggplot(dat, aes(x = preapproval_name, fill = action_taken_name)) +
+        geom_bar(position = "fill")+ 
+        theme_bw()+
+        theme(legend.position = "none")
+ggplotly(p)
+```
+Let's check how it is different statistically. 
+```{r}
+dt <- data.table(dat)[,.(preapproval_name,y)][, {ct = .N; gct = sum(y);list(ct = ct, gct = gct)},by = preapproval_name][,p_y := sum(gct)/sum(ct)]
 
+for( i in 1 : length(dt$ct)){
+t <- prop.test(dt$gct[i], dt$ct[i],p=dt$p_y[i])
+dt$p[i] <- t$p.value
+dt$v[i] <- t$estimate
+}
+
+sum(dt$p < 0.05)
+```
 **owner_occupancy_name**
 ```{r}
 unique(dat$owner_occupancy_name)
@@ -206,7 +300,30 @@ dt <- unique(dt)
 p <- ggplot(dt, aes(x = msamd_name,y = ct))+ geom_histogram(stat = "identity",fill = "blue") +  scale_x_discrete(labels = function(x) str_wrap(x, width = 20))+ theme(axis.text.x=element_text(angle=45,hjust=1,vjust=0.5))
 ggplotly(p)
 ```
+How the loan decision differs by msamd_name.
+```{r}
+p <- ggplot(dat, aes(x=msamd_name, fill = action_taken_name)) +
+        geom_bar(position = "fill") +
+        theme_bw()+
+        theme(legend.position = "none",axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size = 5))+
+        scale_x_discrete(labels = function(x) str_wrap(x, width = 20))
+ggplotly(p)
 
+
+```
+There are 18 levels that reject the null hypothesis of being no difference with the population mean.
+
+```{r}
+dt <- data.table(dat)[,.(msamd_name,y)][,msamd_new := ifelse(is.na(msamd_name),"Other",msamd_name)][, {ct = .N; gct = sum(y);list(ct = ct, gct = gct)},by = msamd_new][,p_y := sum(gct)/sum(ct)]
+
+for( i in 1 : length(dt$ct)){
+t <- prop.test(dt$gct[i], dt$ct[i],p=dt$p_y[i])
+dt$p[i] <- t$p.value
+dt$v[i] <- t$estimate
+}
+
+sum(dt$p < 0.05)
+```
 **loan_type_name** 
 ```{r}
 dt <- data.table(dat)[,ct := .N,by = loan_type_name][,.(loan_type_name,ct)]
@@ -214,13 +331,35 @@ dt <- unique(dt)
 p <- ggplot(dt, aes(x = loan_type_name,y = ct))+ geom_histogram(stat = "identity",fill = "blue") 
 ggplotly(p)
 ```
+How the loan decision differs by msamd_name.
+```{r}
+p <- ggplot(dat, aes(x=loan_type_name, fill = action_taken_name)) +
+        geom_bar(position = "fill") +
+        theme_bw()+
+        theme(legend.position = "none",axis.text.x=element_text(angle=45,hjust=1,vjust=0.5))+
+        scale_x_discrete(labels = function(x) str_wrap(x, width = 20))
+ggplotly(p)
+
+```
+There are 3 levels that reject the null hypothesis of being no difference with the population mean.
+
+```{r}
+dt <- data.table(dat)[,.(loan_type_name,y)][, {ct = .N; gct = sum(y);list(ct = ct, gct = gct)},by = loan_type_name][,p_y := sum(gct)/sum(ct)]
+
+for( i in 1 : length(dt$ct)){
+t <- prop.test(dt$gct[i], dt$ct[i],p=dt$p_y[i])
+dt$p[i] <- t$p.value
+dt$v[i] <- t$estimate
+}
+
+sum(dt$p < 0.05)
+```
 
 **loan_purpose_name**
 ```{r}
 dt <- data.table(dat)[,ct := .N,by = loan_purpose_name][,.(loan_purpose_name,ct)]
 dt <- unique(dt)
-p <- ggplot(dt, aes(x = loan_purpose_name,y = ct))+ geom_histogram(stat = "identity",fill = "blue")
-ggplotly(p)
+dat <- data.table(dat)[,loan_purpose_name := NULL]
 ```
 **lien_status_name**
 ```{r}
@@ -233,14 +372,20 @@ dt <- unique(dt)
 p <- ggplot(dt, aes(x = hoepa_status_name,y = ct))+ geom_histogram(stat = "identity",fill = "blue")
 ggplotly(p)
 
-dat <- data.table(dat)[,hoepa_status := ifelse(as.character(hoepa_status_name) == "HOEPA loan",1,0)]
+p <- ggplot(dat, aes(x=hoepa_status_name, fill = action_taken_name)) +
+        geom_bar(position = "fill") +
+        theme_bw()+
+        theme(legend.position = "none",axis.text.x=element_text(angle=45,hjust=1,vjust=0.5))+
+        scale_x_discrete(labels = function(x) str_wrap(x, width = 20))
+ggplotly(p)
+
 ```
+
 **county_name**
 
 ```{r}
 unique(dat$county_name)
 sum(is.na(dat$county_name))
-dim(dat[is.na(county_name)&!is.na(msamd_name)])
 ```
 There are 162 missing values in county. And those are also missing msamd information.
 
@@ -253,10 +398,42 @@ p <- ggplot(dt, aes(x=reorder(county_name, ct), y=ct)) +
   coord_flip()
 ggplotly(p)
 ```
+How the loan decision differs by county_name
+```{r message=FALSE}
+p <- ggplot(dat, aes(x=county_name, fill = action_taken_name)) +
+        geom_bar(position = "fill") +
+        theme_bw()+
+        theme(legend.position = "none",axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size = 5))+
+        scale_x_discrete(labels = function(x) str_wrap(x, width = 20))
+ggplotly(p)
+
+```
+
+There are 40 levels that reject the null hypothesis of being no difference with the population mean.
+
+```{r}
+dt <- data.table(dat)[,.(county_name,y)][,county_new := ifelse(is.na(county_name),"Other",county_name)][, {ct = .N; gct = sum(y);list(ct = ct, gct = gct)},by = county_new][,p_y := sum(gct)/sum(ct)]
+
+for( i in 1 : length(dt$ct)){
+t <- prop.test(dt$gct[i], dt$ct[i],p=dt$p_y[i])
+dt$p[i] <- t$p.value
+dt$v[i] <- t$estimate
+}
+
+sum(dt$p < 0.05)
+```
+
 **edit_status_name**
 ```{r}
 sum(is.na(dat$edit_status_name))
-dat <- data.table(dat)[,edit_status_new := ifelse(is.na(edit_status_name),0,1)]
+dat <- data.table(dat)[,edit_status_new := ifelse(is.na(edit_status_name),0,1)][,edit_status_name := NULL]
+```
+```{r}
+p <- ggplot(dat, aes(x =edit_status_new, fill = action_taken_name)) +
+        geom_bar(position = "fill")+
+        theme_bw()+
+        theme(legend.position = "none")
+ggplotly(p)
 ```
 
 **denial_reason_name_1**
@@ -282,6 +459,20 @@ p <- ggplot(dt, aes(x = co_applicant_sex_name,y = ct,fill = "co_applicant"))+ ge
 p2 <- ggplotly(p)
 subplot(p1,p2)
 ```
+How the action taken on loan differes by the sex of applicants and co-applicants.
+```{r}
+p1 <- ggplot(dat, aes(x= applicant_sex_name, fill = action_taken_name)) +
+        geom_bar(position = "fill") +
+        theme_bw()+
+        theme(legend.position = "none",axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size = 5))+
+        scale_x_discrete(labels = function(x) str_wrap(x, width = 20))
+p2 <- ggplot(dat, aes(x= co_applicant_sex_name, fill = action_taken_name)) +
+        geom_bar(position = "fill") +
+        theme_bw()+
+        theme(legend.position = "none",axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size = 5))+
+        scale_x_discrete(labels = function(x) str_wrap(x, width = 20))
+subplot(p1,p2)
+```
 **applicant_race_name_1** and **co_applicant_race_name_1**
 ```{r}
 unique(dat$applicant_race_name_1)
@@ -301,12 +492,27 @@ p <- ggplot(dt, aes(x = co_applicant_race_name_1,y = ct,fill = "co_applicant"))+
 p2 <- ggplotly(p)
 subplot(p1,p2)
 ```
+How the action taken on loan differes by the races of applicants and co-applicants.
+```{r}
+p1 <- ggplot(dat, aes(x= applicant_race_name_1, fill = action_taken_name)) +
+        geom_bar(position = "fill") +
+        theme_bw()+
+        theme(legend.position = "none",axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size = 5))+
+        scale_x_discrete(labels = function(x) str_wrap(x, width = 20))
+p2 <- ggplot(dat, aes(x= co_applicant_race_name_1, fill = action_taken_name)) +
+        geom_bar(position = "fill") +
+        theme_bw()+
+        theme(legend.position = "none",axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size = 5))+
+        scale_x_discrete(labels = function(x) str_wrap(x, width = 20))
+subplot(p1,p2)
+```
+
 **census_tract_number**
 ```{r}
 dt <- data.table(dat)[,ct := .N,by = census_tract_number][,.(census_tract_number,ct)]
 dt <- unique(dt)
-summary(dt$ct)
 ```
+
 ```{r}
 dt <- dt[order(-ct)][1:20]
 p <- ggplot(dt, aes(x=reorder(census_tract_number, ct), y=ct)) +
@@ -314,6 +520,32 @@ p <- ggplot(dt, aes(x=reorder(census_tract_number, ct), y=ct)) +
   coord_flip()
 ggplotly(p)
 ```
+Let's look at the its relationship between dependent variable action_taken_name.     
+```{r}
+num_list = plyr::count(dat$census_tract_number) %>% arrange(-freq) %>% head(20)
+dt <- dat %>% filter(census_tract_number %in% num_list[[1]])
+p <- ggplot(dt, aes(x=census_tract_number, fill =  action_taken_name)) +
+        geom_bar(position = "fill")+
+        theme_bw()+
+        theme(legend.position = "none")+
+        coord_flip()
+ggplotly(p)
+
+```
+F test shows that 547 census tracts out of 2967 are significantly different from the mean.
+```{r}
+dt <- data.table(dat)[,.(census_tract_number,y)][,census_tract_new := ifelse(is.na(census_tract_number),"Other",census_tract_number)][, {ct = .N; gct = sum(y);list(ct = ct, gct = gct)},by = census_tract_new][,p_y := sum(gct)/sum(ct)]
+
+for( i in 1 : length(dt$ct)){
+t <- prop.test(dt$gct[i], dt$ct[i],p=dt$p_y[i])
+dt$p[i] <- t$p.value
+dt$v[i] <- t$estimate
+}
+
+sum(dt$p < 0.05)
+
+```
+
 **applicant_ethnicity_name** and **co_applicant_ethnicity_name**
 ```{r}
 dt <- data.table(dat)[,ct := .N,by = applicant_ethnicity_name][,.(applicant_ethnicity_name,ct)]
@@ -327,6 +559,21 @@ p <- ggplot(dt, aes(x = co_applicant_ethnicity_name,y = ct,fill = "co_applicant"
 p2 <- ggplotly(p)
 subplot(p1,p2)
 ```
+How the action taken on loan differes by the ethnicity of applicants and co-applicants.
+```{r}
+p1 <- ggplot(dat, aes(x= applicant_ethnicity_name, fill = action_taken_name)) +
+        geom_bar(position = "fill") +
+        theme_bw()+
+        theme(legend.position = "none",axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size = 5))+
+        scale_x_discrete(labels = function(x) str_wrap(x, width = 20))
+p2 <- ggplot(dat, aes(x= co_applicant_ethnicity_name, fill = action_taken_name)) +
+        geom_bar(position = "fill") +
+        theme_bw()+
+        theme(legend.position = "none",axis.text.x=element_text(angle=45,hjust=1,vjust=0.5,size = 5))+
+        scale_x_discrete(labels = function(x) str_wrap(x, width = 20))
+subplot(p1,p2)
+```
+
 **agency_name** and **agency_abbr**
 We only need one of them in the data.
 
@@ -337,3 +584,32 @@ dt <- unique(dt)
 p <- ggplot(dt, aes(x = agency_abbr,y = ct))+ geom_histogram(stat = "identity",fill = "blue")  
 ggplotly(p)
 ```
+
+```{r}
+p <- ggplot(dat, aes(x=agency_abbr,fill = action_taken_name)) +
+        geom_bar(position = "fill")+
+        theme_bw()+
+        theme(legend.position = "none")
+ggplotly(p)
+```
+##Correlation Matrix for All Continuous Variables
+```{r}
+dt <- as.data.frame(dat[,1:8])
+#Remove all rows with NAs
+dt <- dt[complete.cases(dt), ]
+cor(dt)
+```
+###Missing Value Imputation using irmi and KNN
+```{r message=FALSE,warning=FALSE,eval=FALSE}
+#Remove columns with only one level
+dat <- data.table(dat)[,c("as_of_year","application_date_indicator") := NULL]
+library(VIM)
+imp_testdata1 <- kNN(as.data.frame(dat), k = 3)
+imp_testdata2 <- irmi(as.data.frame(dat), k = 3)
+#Both failed -- Error: cannot allocate vector of size 6.5 Gb
+library(DMwR)
+imp_testdata3 <- knnImputation(as.data.frame(dat[,1:8]),k=3)
+#This takes forever!!
+```
+
+Question: how can I conduct knnimpuation, or even CV Knn imputation? I try to plot mapping the data to county level(googlevis,), but still can't do it, help please.
